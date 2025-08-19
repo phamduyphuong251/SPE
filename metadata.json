@@ -1,0 +1,5 @@
+{
+  "name": "Contoso Legal",
+  "description": "A demo application for SharePoint Embedded, showcasing corporate legal case management. Users can create and manage legal cases, upload and view documents, and collaborate securely.",
+  "requestFramePermissions": []
+}
