@@ -15,77 +15,145 @@ async function getAccessToken(instance: IPublicClientApplication, account: Accou
 
 export async function fetchLegalCases(instance: IPublicClientApplication, account: AccountInfo): Promise<LegalCase[]> {
   const accessToken = await getAccessToken(instance, account);
-  const response = await fetch(
-    `${GRAPH_API_BASE_URL}/storage/fileStorage/containers?$select=id,displayName,description,createdDateTime&$filter=containerTypeId eq ${CONTAINER_TYPE_ID}`,
-    {
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-      },
-    }
-  );
-
-  if (!response.ok) {
-    throw new Error(`Failed to fetch legal cases: ${response.statusText}`);
-  }
-
-  const data = await response.json();
-  // We need to get the driveId for each container to browse files
-  const casesWithDrives: LegalCase[] = [];
   
-  for (const c of data.value) {
-    try {
-      const driveResponse = await fetch(`${GRAPH_API_BASE_URL}/storage/fileStorage/containers/${c.id}/drive`, {
-          headers: { Authorization: `Bearer ${accessToken}` }
-      });
-      if(driveResponse.ok) {
-          const driveData = await driveResponse.json();
-          casesWithDrives.push({ ...c, driveId: driveData.id });
-      } else {
-          console.warn(`Could not retrieve drive for case: ${c.displayName}`);
+  try {
+    // Lấy site root trước
+    const siteResponse = await fetch(`${GRAPH_API_BASE_URL}/sites/root`, {
+      headers: {
+        Authorization: `Bearer ${accessToken}`
       }
-    } catch (error) {
-      console.error(`Error fetching drive for case ${c.id}:`, error);
+    });
+    
+    if (!siteResponse.ok) {
+      throw new Error(`Failed to get site root: ${siteResponse.statusText}`);
     }
-  }
+    
+    const site = await siteResponse.json();
+    
+    // Lấy tất cả lists trong site
+    const response = await fetch(
+      `${GRAPH_API_BASE_URL}/sites/${site.id}/lists?$select=id,displayName,description,createdDateTime`,
+      {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      }
+    );
 
-  return casesWithDrives;
+    if (!response.ok) {
+      throw new Error(`Failed to fetch legal cases: ${response.statusText}`);
+    }
+
+    const data = await response.json();
+    const casesWithDrives: LegalCase[] = [];
+    
+    // Lọc chỉ document libraries
+    for (const list of data.value) {
+      try {
+        // Kiểm tra xem có phải document library không
+        const listDetailsResponse = await fetch(`${GRAPH_API_BASE_URL}/sites/${site.id}/lists/${list.id}`, {
+          headers: { Authorization: `Bearer ${accessToken}` }
+        });
+        
+        if (listDetailsResponse.ok) {
+          const listDetails = await listDetailsResponse.json();
+          
+          // Chỉ lấy document libraries
+          if (listDetails.list && listDetails.list.template === 'documentLibrary') {
+            // Lấy drive ID
+            const driveResponse = await fetch(`${GRAPH_API_BASE_URL}/sites/${site.id}/lists/${list.id}/drive`, {
+              headers: { Authorization: `Bearer ${accessToken}` }
+            });
+            
+            if (driveResponse.ok) {
+              const driveData = await driveResponse.json();
+              casesWithDrives.push({
+                id: list.id,
+                displayName: list.displayName,
+                description: list.description || '',
+                createdDateTime: list.createdDateTime,
+                driveId: driveData.id
+              });
+            }
+          }
+        }
+      } catch (error) {
+        console.error(`Error processing list ${list.id}:`, error);
+      }
+    }
+
+    return casesWithDrives;
+  } catch (error) {
+    console.error('Error fetching legal cases:', error);
+    throw new Error(`Failed to fetch legal cases: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  }
 }
 
 export async function createLegalCase(instance: IPublicClientApplication, account: AccountInfo, name: string, description: string): Promise<LegalCase> {
     const accessToken = await getAccessToken(instance, account);
     
-    // Tạo container trong SharePoint site
-    const response = await fetch(`${GRAPH_API_BASE_URL}/sites/root/lists`, {
-        method: 'POST',
-        headers: {
-            Authorization: `Bearer ${accessToken}`,
-            'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
+    try {
+        // Lấy site root trước
+        const siteResponse = await fetch(`${GRAPH_API_BASE_URL}/sites/root`, {
+            headers: {
+                Authorization: `Bearer ${accessToken}`
+            }
+        });
+        
+        if (!siteResponse.ok) {
+            throw new Error(`Failed to get site root: ${siteResponse.statusText}`);
+        }
+        
+        const site = await siteResponse.json();
+        
+        // Tạo list trong SharePoint site
+        const response = await fetch(`${GRAPH_API_BASE_URL}/sites/${site.id}/lists`, {
+            method: 'POST',
+            headers: {
+                Authorization: `Bearer ${accessToken}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                displayName: name,
+                description: description,
+                list: {
+                    template: 'documentLibrary'
+                }
+            })
+        });
+
+        if (!response.ok) {
+            const errorText = await response.text();
+            console.error('Create case error:', errorText);
+            throw new Error(`Failed to create legal case: ${response.statusText} - ${errorText}`);
+        }
+        
+        const result = await response.json();
+        
+        // Lấy drive ID của list
+        const driveResponse = await fetch(`${GRAPH_API_BASE_URL}/sites/${site.id}/lists/${result.id}/drive`, {
+            headers: {
+                Authorization: `Bearer ${accessToken}`
+            }
+        });
+        
+        let driveId = result.id;
+        if (driveResponse.ok) {
+            const driveData = await driveResponse.json();
+            driveId = driveData.id;
+        }
+        
+        return {
+            id: result.id,
             displayName: name,
             description: description,
-            list: {
-                template: 'documentLibrary'
-            }
-        })
-    });
-
-    if (!response.ok) {
-        const errorText = await response.text();
-        console.error('Create case error:', errorText);
-        throw new Error(`Failed to create legal case: ${response.statusText} - ${errorText}`);
+            createdDateTime: result.createdDateTime || new Date().toISOString(),
+            driveId: driveId
+        };
+    } catch (error) {
+        console.error('Create case error:', error);
+        throw new Error(`Failed to create legal case: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
-    
-    const result = await response.json();
-    
-    // Tạo một mock response để tương thích với interface hiện tại
-    return {
-        id: result.id,
-        displayName: name,
-        description: description,
-        createdDateTime: new Date().toISOString(),
-        driveId: result.id // Sử dụng list ID làm drive ID
-    };
 }
 
 
