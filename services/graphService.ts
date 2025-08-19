@@ -53,7 +53,9 @@ export async function fetchLegalCases(instance: IPublicClientApplication, accoun
 
 export async function createLegalCase(instance: IPublicClientApplication, account: AccountInfo, name: string, description: string): Promise<LegalCase> {
     const accessToken = await getAccessToken(instance, account);
-    const response = await fetch(`${GRAPH_API_BASE_URL}/storage/fileStorage/containers`, {
+    
+    // Tạo container trong SharePoint site
+    const response = await fetch(`${GRAPH_API_BASE_URL}/sites/root/lists`, {
         method: 'POST',
         headers: {
             Authorization: `Bearer ${accessToken}`,
@@ -62,14 +64,28 @@ export async function createLegalCase(instance: IPublicClientApplication, accoun
         body: JSON.stringify({
             displayName: name,
             description: description,
-            containerTypeId: CONTAINER_TYPE_ID
+            list: {
+                template: 'documentLibrary'
+            }
         })
     });
 
     if (!response.ok) {
-        throw new Error(`Failed to create legal case: ${response.statusText}`);
+        const errorText = await response.text();
+        console.error('Create case error:', errorText);
+        throw new Error(`Failed to create legal case: ${response.statusText} - ${errorText}`);
     }
-    return response.json();
+    
+    const result = await response.json();
+    
+    // Tạo một mock response để tương thích với interface hiện tại
+    return {
+        id: result.id,
+        displayName: name,
+        description: description,
+        createdDateTime: new Date().toISOString(),
+        driveId: result.id // Sử dụng list ID làm drive ID
+    };
 }
 
 

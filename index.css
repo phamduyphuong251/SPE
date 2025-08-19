@@ -1,0 +1,48 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Custom styles */
+.brand-primary {
+  @apply text-blue-600;
+}
+
+.brand-secondary {
+  @apply text-green-600;
+}
+
+.brand-text {
+  @apply text-gray-900;
+}
+
+.brand-text-light {
+  @apply text-gray-600;
+}
+
+.brand-background {
+  @apply bg-gray-50;
+}
+
+.brand-border {
+  @apply border-gray-200;
+}
+
+.brand-primary-light {
+  @apply bg-blue-50;
+}
+
+/* Animation */
+.animate-fade-in-up {
+  animation: fadeInUp 0.3s ease-out;
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+} 
