@@ -23,20 +23,28 @@ const LoginPage: FC = () => {
     setError(null);
     setMessage(null);
     
-    const authMethod = action === 'sign_in' 
-      ? supabase.auth.signInWithPassword 
-      : supabase.auth.signUp;
-
-    const { error } = await authMethod({ email, password });
-
-    if (error) {
-      setError(error.message);
-    } else if (action === 'sign_up') {
-        setMessage('Check your email for a confirmation link!');
-        setEmail('');
-        setPassword('');
+    try {
+      if (action === 'sign_in') {
+        const { error } = await supabase.auth.signInWithPassword({ email, password });
+        if (error) {
+          setError(error.message);
+        }
+      } else {
+        const { error } = await supabase.auth.signUp({ email, password });
+        if (error) {
+          setError(error.message);
+        } else {
+          setMessage('Check your email for a confirmation link!');
+          setEmail('');
+          setPassword('');
+        }
+      }
+    } catch (err) {
+      setError('An unexpected error occurred. Please try again.');
+      console.error('Auth error:', err);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   return (
