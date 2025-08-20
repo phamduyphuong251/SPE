@@ -1,7 +1,8 @@
-import React, { FC } from 'react';
+import React, { FC, useState } from 'react';
 import { useMsal, useIsAuthenticated } from "@azure/msal-react";
 import type { Session } from '@supabase/supabase-js';
 import { supabase } from '../constants';
+import UserProfile from './UserProfile';
 
 interface HeaderProps {
   supabaseSession: Session | null;
@@ -10,15 +11,23 @@ interface HeaderProps {
 const Header: FC<HeaderProps> = ({ supabaseSession }) => {
   const { instance, accounts } = useMsal();
   const isAuthenticated = useIsAuthenticated();
+  const [showUserProfile, setShowUserProfile] = useState(false);
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
     if (isAuthenticated) {
       localStorage.clear();
       instance.logoutPopup({
         postLogoutRedirectUri: "/",
       });
     } else if (supabaseSession) {
-      supabase.auth.signOut();
+      try {
+        const { error } = await supabase.auth.signOut();
+        if (error) {
+          console.error('Supabase logout error:', error);
+        }
+      } catch (err) {
+        console.error('Logout error:', err);
+      }
     }
   };
 
@@ -36,6 +45,14 @@ const Header: FC<HeaderProps> = ({ supabaseSession }) => {
             <div className="text-sm text-brand-text-light">
                 <span className="font-semibold">{msalUser?.name || supabaseUser?.email}</span>
             </div>
+            {supabaseUser && (
+              <button
+                onClick={() => setShowUserProfile(true)}
+                className="px-3 py-2 text-sm font-medium text-brand-secondary bg-brand-secondary-light rounded-md hover:bg-opacity-80 transition"
+              >
+                Profile
+              </button>
+            )}
             <button
               onClick={handleLogout}
               className="px-4 py-2 text-sm font-medium text-brand-primary bg-brand-primary-light rounded-md hover:bg-opacity-80 transition"
@@ -44,6 +61,11 @@ const Header: FC<HeaderProps> = ({ supabaseSession }) => {
             </button>
           </div>
         )}
+        
+        <UserProfile 
+          isOpen={showUserProfile} 
+          onClose={() => setShowUserProfile(false)} 
+        />
       </div>
     </header>
   );

@@ -19,29 +19,71 @@ const LoginPage: FC = () => {
   };
 
   const handleSupabaseAuth = async (action: 'sign_in' | 'sign_up') => {
+    if (!email.trim() || !password.trim()) {
+      setError('Please enter both email and password');
+      return;
+    }
+
     setLoading(true);
     setError(null);
     setMessage(null);
     
     try {
       if (action === 'sign_in') {
-        const { error } = await supabase.auth.signInWithPassword({ email, password });
+        const { data, error } = await supabase.auth.signInWithPassword({ 
+          email: email.trim(), 
+          password: password 
+        });
+        
         if (error) {
           setError(error.message);
+        } else if (data.user) {
+          setMessage('Login successful!');
         }
       } else {
-        const { error } = await supabase.auth.signUp({ email, password });
+        const { data, error } = await supabase.auth.signUp({ 
+          email: email.trim(), 
+          password: password 
+        });
+        
         if (error) {
           setError(error.message);
-        } else {
+        } else if (data.user && !data.session) {
           setMessage('Check your email for a confirmation link!');
           setEmail('');
           setPassword('');
+        } else if (data.session) {
+          setMessage('Account created and logged in successfully!');
         }
       }
     } catch (err) {
       setError('An unexpected error occurred. Please try again.');
       console.error('Auth error:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handlePasswordReset = async () => {
+    if (!email.trim()) {
+      setError('Please enter your email address');
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+    setMessage(null);
+
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(email.trim());
+      if (error) {
+        setError(error.message);
+      } else {
+        setMessage('Password reset link sent to your email!');
+      }
+    } catch (err) {
+      setError('Failed to send password reset email');
+      console.error('Password reset error:', err);
     } finally {
       setLoading(false);
     }
@@ -102,6 +144,15 @@ const LoginPage: FC = () => {
                     className="w-full px-4 py-2 font-semibold text-brand-secondary bg-transparent border-2 border-brand-secondary rounded-lg hover:bg-brand-secondary hover:text-white transition"
                  >
                     Sign Up
+                </button>
+              </div>
+              <div className="text-center">
+                <button
+                  onClick={handlePasswordReset}
+                  disabled={loading}
+                  className="text-sm text-brand-secondary hover:underline disabled:opacity-50"
+                >
+                  Forgot password?
                 </button>
               </div>
            </form>
